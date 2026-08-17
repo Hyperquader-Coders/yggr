@@ -1,0 +1,38 @@
+# Yggr — layering (docs/ARCHITECTURE.md §1)
+# Render:  d2 diags/architecture.d2 diags/architecture.svg
+
+direction: down
+
+title: |md
+  # Yggr architecture
+| { near: top-center }
+
+main: "GTK main thread — src/ui" {
+  style.fill: "#eef6ff"
+  editor: "editor.odin\nwindow, view, client lifecycle,\ndebounced didChange, Ctrl+Shift+F"
+  diagnostics: "diagnostics.odin\nsquiggle tags + gutter marks"
+  providers: "providers.odin\nhover + completion"
+  format: "format.odin\nreverse-order TextEdits"
+  bindings: "gtk_bindings.odin\nforeign decls"
+  shim: "shim.c\nGObject: KatProvider + KatProposal"
+}
+
+lsp: "src/lsp — pure Odin, NO GTK, headless-testable" {
+  style.fill: "#eefbf0"
+  client: "client.odin\ninitialize, correlation, doc versions"
+  transport: "transport.odin\nsubprocess spawn + shutdown"
+  protocol: "protocol.odin\ntyped LSP structs"
+  encoding: "encoding.odin\nutf16 <-> utf8"
+  edits: "edits.odin\nTextEdit sort + apply"
+  vendor: "vendor_ols/\nframing + marshal + uri (OLS, MIT)"
+}
+
+server: "foundry lsp run <gtksourceview-lang-id>\n→ real language server" {
+  style.fill: "#fff6e6"
+}
+
+main -> lsp: "narrow API: client_request, client_did_*, client_shutdown"
+lsp.transport -> server: "JSON-RPC 2.0 over stdio (Content-Length frames)"
+lsp -> main: "results marshalled via g_idle_add_full (heap payload)" {
+  style.stroke-dash: 3
+}

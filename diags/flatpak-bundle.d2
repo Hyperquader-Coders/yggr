@@ -1,0 +1,64 @@
+# Yggr — Flatpak bundle anatomy (docs/FLATPAK.md §6, docs/SUPPLY-CHAIN.md)
+# Render:  d2 diags/flatpak-bundle.d2 diags/flatpak-bundle.svg
+
+direction: down
+
+title: |md
+  # Flatpak bundle
+| { near: top-center }
+
+build: "BUILD TIME — flatpak-builder (discarded from the final image)" {
+  style.fill: "#f3eeff"
+  sdk: "org.gnome.Sdk // 50"
+  odinext: "Sdk.Extension.odin\nthe toolchain, already built\n(see supply-chain.d2)"
+  llvm: "Sdk.Extension.llvm22\nprovides clang — Odin links through it,\nand the freedesktop SDK ships none"
+  ambersrc: "amber-lib git (pinned commit)\nsource-only, -collection:amber"
+  shimc: "gcc shim.c → build/shim.o"
+}
+
+runtime: "org.gnome.Platform // 50\n(ships GTK4 + GtkSourceView 5 + vte — not re-bundled)" {
+  style.fill: "#eef6ff"
+}
+
+app: "/app — the installed image" {
+  style.fill: "#eefbf0"
+
+  bin: "/app/bin" {
+    yggr: "yggr\nOdin binary; links shim.o + gtk4 + gsv5"
+    odin: "odin → ../opt/odin/odin (symlink)"
+    ols: "ols + odinfmt\nbuilt from source @ dev-2026-06\nwith the extension's compiler"
+    builtin: "builtin/\nOLS docs — MUST sit beside the ols bin"
+    marksman: "marksman (Markdown LSP)"
+  }
+
+  opt: "/app/opt/odin — bundled Odin toolchain" {
+    compiler: "odin compiler\ncopied from /usr/lib/sdk/odin"
+    libllvm: "libLLVM.so.22.1 + libLLVM-22.so\ncame with the extension; rpath ORIGIN"
+    coll: "core / base / vendor\n(vendor is required by ODIN_ROOT —\nkept, not stripped)"
+  }
+
+  share: "/app/share" {
+    lang: "gtksourceview-5/language-specs/odin.lang"
+    conf: "yggr/lsp-servers.conf (LSP registry)"
+    icons: "icons/hicolor/… (svg + symbolic + png 32–512)"
+    locale: "locale/de/…/yggr.mo (German out of the box)"
+    meta: "applications/*.desktop + metainfo/*.xml"
+  }
+}
+
+env: "finish-args (runtime env)" {
+  style.fill: "#fff6e6"
+  root: "ODIN_ROOT=/app/opt/odin\n→ OLS resolves core:/base:"
+  im: "GTK_IM_MODULE=gtk-im-context-simple\n→ sidesteps host IBus 1.5.29 D-Bus skew"
+  fs: "--filesystem=host (MVP; portals = post-MVP)"
+}
+
+build -> app: "produces"
+runtime -> app: "app links against"
+env -> app: "configures"
+
+# The payoff: OLS diagnoses by shelling out to the bundled compiler.
+app.bin.ols -> app.opt.compiler: "spawns `odin check` at runtime" {
+  style.stroke-dash: 3
+  style.stroke: "#c0392b"
+}

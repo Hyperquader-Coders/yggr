@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.hyperquader.Yggr</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Yggr</name>
+  <summary>GTK4 editor with built-in language servers</summary>
+  <summary xml:lang="de">GTK4-Editor mit integrierten Sprachservern</summary>
+  <developer id="com.hyperquader">
+    <name>Andre Bremer</name>
+  </developer>
+  <url type="homepage">https://hyperquader.com</url>
+  <url type="bugtracker">https://github.com/Hyperquader-Coders/yggr/issues</url>
+  <url type="vcs-browser">https://github.com/Hyperquader-Coders/yggr</url>
+  <update_contact>andre_at_hyperquader.com</update_contact>
+  <description>
+    <p>Yggr is a GTK4/GtkSourceView editor written in Odin with Language
+    Server Protocol support. This flatpak bundles OLS (Odin) and marksman
+    (Markdown) so diagnostics, hover, completion, and formatting work out
+    of the box with no host setup.</p>
+    <p xml:lang="de">Yggr ist ein in Odin geschriebener GTK4/GtkSourceView-Editor
+    mit Unterstützung für das Language Server Protocol. Dieses Flatpak bündelt
+    OLS (Odin) und marksman (Markdown), sodass Diagnosen, Kurzinfos,
+    Vervollständigung und Formatierung ohne Einrichtung sofort funktionieren.</p>
+  </description>
+  <!-- UI is localized (gettext): English + German out of the box (po/). -->
+  <languages>
+    <lang percentage="100">en</lang>
+    <lang percentage="100">de</lang>
+  </languages>
+  <launchable type="desktop-id">io.github.hyperquader.Yggr.desktop</launchable>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-07-14"/>
+  </releases>
+</component>

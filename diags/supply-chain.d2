@@ -1,0 +1,65 @@
+# Yggr — how an Odin editor gets built inside a Flatpak sandbox (docs/SUPPLY-CHAIN.md)
+# Render:  d2 diags/supply-chain.d2 diags/supply-chain.svg
+
+direction: down
+
+title: |md
+  # Toolchain supply chain
+  ### why four repos exist to compile one editor
+| { near: top-center }
+
+problem: "THE CONSTRAINT\nA Flatpak build sandbox reaches nothing on the host.\nNo installed compiler, no runner toolchain, no network at build time.\nAn Odin app therefore has no compiler unless one is built inside." {
+  style.fill: "#fff0f0"
+  style.stroke: "#c0392b"
+}
+
+upstream: "UPSTREAM (not ours)" {
+  style.fill: "#f5f5f5"
+  odin: "odin-lang/Odin\nnames LLVMInitialize<Target>* directly;\nsrc/llvm-c/Config/Targets.def is vendored\nand lists every target regardless of the\nLLVM actually linked"
+  llvm: "Sdk.Extension.llvm22 // 25.08\nX86 AMDGPU ARM NVPTX WebAssembly\nno AArch64, no RISCV\n— and the only clang in the SDK"
+  ols: "DanielGavin/ols @ dev-2026-06\nmust track the compiler tag:\ndev-2026-05 uses Odin_OS_Type.Haiku,\ndropped before dev-2026-07a"
+}
+
+fork: "1. Hyperquader-Coders/Odin — branch llvm-target-guards" {
+  style.fill: "#f3eeff"
+  patch: "build_odin.sh reads llvm-config --targets-built\nand defines ODIN_LLVM_HAS_<TARGET>;\nllvm_backend.cpp compiles each switch arm\nonly when its target is present"
+  why: "Without it the link fails over branches\nan x86_64 build can never take.\nThe manifest used to sed those lines out."
+}
+
+ext: "2. odin-sdk-extension → org.freedesktop.Sdk.Extension.odin" {
+  style.fill: "#eef6ff"
+  builds: "builds the compiler once, from the fork,\nagainst llvm22 inside the sandbox"
+  ships: "/usr/lib/sdk/odin\nodin + core/base/vendor + libLLVM + enable.sh"
+  gap: "No such extension existed.\nEvery Odin app had to do this itself."
+}
+
+archive: "3. amberlinux-flatpak → flatpak.amberlinux.org" {
+  style.fill: "#fff6e6"
+  ostree: "ostree archive-z2, GPG-signed\nsummary/refs as Cloudflare assets,\nobjects/** + deltas/** from R2"
+  mutable: "content-addressed EXCEPT\n.commitmeta and deltas/** —\nnamed by commit, so they change:\nnever cache, always re-upload"
+}
+
+app: "4. yggr — the consumer" {
+  style.fill: "#eefbf0"
+  declare: "sdk-extensions:\n  Sdk.Extension.odin   (the toolchain)\n  Sdk.Extension.llvm22 (clang, to link)"
+  copy: "cp -a /usr/lib/sdk/odin/. /app/opt/odin/\nthe extension is build-time only, but OLS\nshells out to `odin check` at RUNTIME"
+  build: "compiles ols, then yggr itself,\nwith the extension's compiler"
+}
+
+problem -> fork: "makes a compiler mandatory"
+upstream.odin -> fork: "forked, one patch"
+upstream.llvm -> ext: "built against"
+fork -> ext: "pinned by commit"
+ext -> archive: "published as a runtime ref"
+archive -> app: "flatpak remote-add + sdk-extensions" { style.stroke: "#2e7d32"; style.bold: true }
+upstream.ols -> app: "built from source\nagainst the same compiler"
+
+next: "NEXT — what retires the detours" {
+  style.fill: "#f5f5f5"
+  style.stroke-dash: 3
+  up: "Upstream the LLVM-target patch.\nThen the fork goes away and the extension\nbuilds from odin-lang/Odin at a release tag.\nBlocked on build.bat, which has no equivalent."
+  fh: "Flathub submission.\nThen the extension is on Flathub and the\nprivate archive stops being load-bearing.\nBlocked on the fork, on portals instead of\n--filesystem=host, and on marksman being\na prebuilt blob."
+}
+
+next.up -> fork: "removes" { style.stroke-dash: 3 }
+next.fh -> archive: "removes the need for" { style.stroke-dash: 3 }

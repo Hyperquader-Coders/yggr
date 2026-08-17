@@ -1,0 +1,22 @@
+# Headless LSP client tests. src/lsp imports no GTK and no amber collection, so
+# this needs only a compiler; the GTK build rides the release workflow.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # Empty version follows amber-odin's monthly release; pin it for a
+      # reproducible build.
+      - uses: Hyperquader-Coders/setup-amber-odin@v1
+
+      - name: odin test
+        run: make test

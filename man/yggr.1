@@ -1,0 +1,78 @@
+.TH YGGR 1 "August 2026" "yggr 0.1.0" "User Commands"
+.SH NAME
+yggr \- standalone editor test bed for kat800
+.SH SYNOPSIS
+.B yggr
+.RI [ FILE ]
+.SH DESCRIPTION
+.B Yggr
+is kat800's built\-in editor pulled out into its own GTK4 window, so editor
+features can be prototyped against a real buffer without rebuilding and driving
+a whole terminal emulator to reach one pane. Language Server Protocol
+integration is the current example: diagnostics, hover, completion and
+whole\-document formatting are proven here first and then folded back into
+kat800.
+.PP
+It is a proving ground, not a general\-purpose editor. The surface is
+deliberately small and stays small.
+.PP
+With no
+.IR FILE ,
+Yggr opens an empty buffer. Language detection, and therefore which server is
+started, follows GtkSourceView's language guessing for the opened file.
+.SH LANGUAGE SERVERS
+Servers are never spawned directly. One is resolved in three steps, first match
+winning:
+.IP 1. 4
+.B $YGGR_LSP_CMD
+\(em an explicit command, intended for testing.
+.IP 2. 4
+A bundled registry
+.RI ( lsp-servers.conf ),
+which is how the Flatpak build supplies servers inside its sandbox.
+.IP 3. 4
+The
+.B Foundry
+CLI, as
+.BR "foundry lsp run " \fILANGUAGE\fR .
+.PP
+This package bundles no servers: install
+.B foundry
+or set
+.BR $YGGR_LSP_CMD .
+The Flatpak build is the batteries\-included one, carrying OLS and a runnable
+Odin toolchain.
+.SH ENVIRONMENT
+.TP
+.B YGGR_LSP_CMD
+Command to run as the language server, bypassing the registry and Foundry.
+.TP
+.B YGGR_FOUNDRY_BIN
+Path to the
+.B foundry
+binary when it is not on
+.BR $PATH .
+.TP
+.B YGGR_LSP_TRACE
+Set to
+.B 1
+to trace LSP traffic on stderr.
+.TP
+.B YGGR_LOCALEDIR
+Message\-catalogue directory, searched before the installed location \(em set it
+to run a build without installing.
+.SH FILES
+.TP
+.I /usr/share/yggr/lsp-servers.conf
+Server registry consulted before Foundry.
+.TP
+.I /usr/share/gtksourceview-5/language-specs/odin.lang
+Odin syntax definition; GtkSourceView ships no upstream Odin spec.
+.SH SEE ALSO
+.BR kat800 (1)
+.PP
+Full documentation, including the Flatpak packaging spec, is in
+.I /usr/share/doc/yggr
+and at https://github.com/Hyperquader-Coders/yggr
+.SH AUTHOR
+Andre Bremer <hyperquader@gmail.com>

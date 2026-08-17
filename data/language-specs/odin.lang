@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  odin.lang — minimal GtkSourceView 5 language spec for Odin.
+  GtkSourceView ships no Odin definition upstream, so without this file
+  gtk_source_buffer_get_language() returns NULL for .odin files and both
+  highlighting and LSP language-id routing fail.
+  Installed to /app/share/gtksourceview-5/language-specs/ (flatpak) or any
+  dir registered via gtk_source_language_manager_set_search_path.
+  Covers keywords, comments, strings and numbers. Attributes (@...) and
+  directives (#...) are not handled.
+-->
+<language id="odin" name="Odin" version="2.0" _section="Source">
+  <metadata>
+    <property name="mimetypes">text/x-odin</property>
+    <property name="globs">*.odin</property>
+    <property name="line-comment-start">//</property>
+    <property name="block-comment-start">/*</property>
+    <property name="block-comment-end">*/</property>
+  </metadata>
+
+  <styles>
+    <style id="comment"  name="Comment"  map-to="def:comment"/>
+    <style id="string"   name="String"   map-to="def:string"/>
+    <style id="char"     name="Character" map-to="def:character"/>
+    <style id="keyword"  name="Keyword"  map-to="def:keyword"/>
+    <style id="type"     name="Type"     map-to="def:type"/>
+    <style id="constant" name="Constant" map-to="def:constant"/>
+    <style id="number"   name="Number"   map-to="def:number"/>
+    <style id="directive" name="Directive" map-to="def:preprocessor"/>
+  </styles>
+
+  <definitions>
+    <context id="odin">
+      <include>
+        <context id="line-comment" style-ref="comment" end-at-line-end="true" class="comment">
+          <start>//</start>
+        </context>
+
+        <!-- Odin block comments nest -->
+        <context id="block-comment" style-ref="comment" class="comment">
+          <start>/\*</start>
+          <end>\*/</end>
+          <include>
+            <context ref="block-comment"/>
+          </include>
+        </context>
+
+        <context id="string" style-ref="string" end-at-line-end="true" class="string">
+          <start>"</start>
+          <end>"</end>
+          <include>
+            <context id="escape" style-ref="def:special-char">
+              <match>\\.</match>
+            </context>
+          </include>
+        </context>
+
+        <context id="raw-string" style-ref="string" class="string">
+          <start>`</start>
+          <end>`</end>
+        </context>
+
+        <context id="char" style-ref="char">
+          <match>'(\\.|[^'\\])'</match>
+        </context>
+
+        <context id="directive" style-ref="directive">
+          <match>#[a-zA-Z_][a-zA-Z0-9_]*</match>
+        </context>
+
+        <context id="attribute" style-ref="directive">
+          <match>@\(?[a-zA-Z_][a-zA-Z0-9_=,\s]*\)?</match>
+        </context>
+
+        <context id="keywords" style-ref="keyword">
+          <keyword>package</keyword><keyword>import</keyword>
+          <keyword>proc</keyword><keyword>struct</keyword>
+          <keyword>enum</keyword><keyword>union</keyword>
+          <keyword>map</keyword><keyword>bit_set</keyword>
+          <keyword>bit_field</keyword><keyword>matrix</keyword>
+          <keyword>if</keyword><keyword>else</keyword>
+          <keyword>when</keyword><keyword>for</keyword>
+          <keyword>switch</keyword><keyword>case</keyword>
+          <keyword>break</keyword><keyword>continue</keyword>
+          <keyword>fallthrough</keyword><keyword>defer</keyword>
+          <keyword>return</keyword><keyword>or_else</keyword>
+          <keyword>or_return</keyword><keyword>or_break</keyword>
+          <keyword>or_continue</keyword><keyword>in</keyword>
+          <keyword>not_in</keyword><keyword>do</keyword>
+          <keyword>dynamic</keyword><keyword>foreign</keyword>
+          <keyword>using</keyword><keyword>transmute</keyword>
+          <keyword>cast</keyword><keyword>auto_cast</keyword>
+          <keyword>distinct</keyword><keyword>context</keyword>
+          <keyword>where</keyword><keyword>asm</keyword>
+        </context>
+
+        <context id="types" style-ref="type">
+          <keyword>bool</keyword><keyword>b8</keyword><keyword>b16</keyword><keyword>b32</keyword><keyword>b64</keyword>
+          <keyword>int</keyword><keyword>uint</keyword><keyword>uintptr</keyword>
+          <keyword>i8</keyword><keyword>i16</keyword><keyword>i32</keyword><keyword>i64</keyword><keyword>i128</keyword>
+          <keyword>u8</keyword><keyword>u16</keyword><keyword>u32</keyword><keyword>u64</keyword><keyword>u128</keyword>
+          <keyword>f16</keyword><keyword>f32</keyword><keyword>f64</keyword>
+          <keyword>complex32</keyword><keyword>complex64</keyword><keyword>complex128</keyword>
+          <keyword>quaternion64</keyword><keyword>quaternion128</keyword><keyword>quaternion256</keyword>
+          <keyword>rune</keyword><keyword>string</keyword><keyword>cstring</keyword>
+          <keyword>rawptr</keyword><keyword>typeid</keyword><keyword>any</keyword>
+        </context>
+
+        <context id="constants" style-ref="constant">
+          <keyword>true</keyword><keyword>false</keyword><keyword>nil</keyword>
+        </context>
+
+        <context id="number" style-ref="number">
+          <match extended="true">
+            \b(0[bB][01_]+|0[oO][0-7_]+|0[xX][0-9a-fA-F_]+|[0-9][0-9_]*(\.[0-9_]+)?([eE][+-]?[0-9]+)?[ijk]?)\b
+          </match>
+        </context>
+      </include>
+    </context>
+  </definitions>
+</language>

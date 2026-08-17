@@ -1,0 +1,218 @@
+# Flatpak manifest — yggr editor with bundled language servers.
+# Build:   flatpak-builder --user --install --force-clean build-dir flatpak/io.github.hyperquader.Yggr.yaml
+# Run:     flatpak run io.github.hyperquader.Yggr <file>
+# See docs/FLATPAK.md for agent instructions and verification steps.
+
+app-id: io.github.hyperquader.Yggr
+# stable, not flatpak-builder's default master: the branch is what users pin,
+# renaming it later orphans every install, and Flathub expects stable.
+branch: stable
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  # The Odin toolchain, mounted at /usr/lib/sdk/odin during the build. Published
+  # from flatpak.amberlinux.org, so the CI workflow adds that remote before
+  # building. yggr used to compile the compiler itself in an `odin` module here;
+  # the extension exists so no Odin application has to.
+  - org.freedesktop.Sdk.Extension.odin
+  # Still required, and not only to build the extension: Odin links through
+  # clang, which the freedesktop SDK does not ship. Dropping this gives
+  # "clang: command not found" at the link step of every Odin module below.
+  - org.freedesktop.Sdk.Extension.llvm22
+
+command: yggr
+
+# Off because `appstreamcli compose` cannot read the icons inside the build
+# sandbox. It runs in the SDK, where gdk-pixbuf 2.44 loads images through a glycin
+# loader that sandboxes itself with `flatpak-spawn --sandbox` — and there is no
+# portal to spawn through during a build, so every icon fails with "Loader process
+# exited early with status '1'". Upstream: gdk-pixbuf #292.
+#
+# Not to be confused with the icon check in `flatpak build-export`, which fails the
+# same build with "Format not recognized". That one runs on the HOST and wants
+# librsvg's gdk-pixbuf SVG loader — see the CI workflow, which installs
+# librsvg2-common for it. Two different failures, two different machines.
+#
+# The metainfo and icons are still installed and exported; only the composed index
+# is missing. A fixed gdk-pixbuf needs just this line removed. See MoSCoW.md.
+appstream-compose: false
+
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  # Editors need to see the user's files. Narrow later if desired
+  # (portal-based open is a post-MVP refinement).
+  - --filesystem=host
+  # OLS type-checks by shelling out to `odin check`; point it at the bundled
+  # toolchain (kept by the cleanup block below) so `core:`/`base:` imports
+  # resolve and diagnostics work with no host Odin installed.
+  - --env=ODIN_ROOT=/app/opt/odin
+  # Use GTK's built-in simple input method instead of the flatpak's IBus IM
+  # module. The runtime's newer GTK4 calls an IBus D-Bus method the host's
+  # older ibus-daemon lacks ("No such property PostProcessKeyEvent"), which
+  # spams warnings on key events and crashes when the text context menu opens.
+  # Simple IM keeps dead-keys/compose (de/en) + the emoji picker; drops only
+  # full IBus/CJK IME. Revisit if CJK input is needed (grant IBus access +
+  # match versions).
+  - --env=GTK_IM_MODULE=gtk-im-context-simple
+  # Uncomment if bundled/managed LSP servers need network (e.g. gopls
+  # fetching modules). OLS and marksman work fully offline.
+  # - --share=network
+
+build-options:
+  append-path: /usr/lib/sdk/llvm22/bin
+  prepend-ld-library-path: /usr/lib/sdk/llvm22/lib
+
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  # Keep the whole Odin toolchain at /opt/odin — compiler + core + base +
+  # vendor — so it runs at runtime (OLS `odin check` -> diagnostics, and a
+  # batteries-included Odin environment for newcomers). Odin validates that
+  # ODIN_ROOT has the `vendor` collection, so vendor must stay; only strip the
+  # cross-platform dead weight (Windows/macOS/static binaries) to save space.
+  - '*.a'
+  - '*.dll'
+  - '*.lib'
+  - '*.dylib'
+
+modules:
+  # --------------------------------------------------------------------
+  # NOTE: org.gnome.Platform 49 already ships gtksourceview-5 and vte;
+  # only add source modules for them if you need a newer version than the
+  # runtime provides (check: flatpak run --command=pkg-config
+  # org.gnome.Sdk//49 --modversion gtksourceview-5).
+  # --------------------------------------------------------------------
+
+  # ---- Odin toolchain, copied from the SDK extension into the app ------
+  # The extension is a BUILD-time mount at /usr/lib/sdk/odin and is gone at
+  # runtime, but OLS produces diagnostics by shelling out to `odin check`, so a
+  # runnable compiler plus core/base/vendor has to live inside the app. Hence a
+  # copy rather than a symlink.
+  #
+  # The extension already ships the libLLVM the compiler is linked against, in
+  # the same directory, so copying the directory brings it along — which is why
+  # this module has no libLLVM handling of its own.
+  - name: odin-toolchain
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/opt/odin
+      - cp -a /usr/lib/sdk/odin/. /app/opt/odin/
+      # enable.sh sets paths for a build environment that will not exist at
+      # runtime; the app sets ODIN_ROOT itself in finish-args.
+      - rm -f /app/opt/odin/enable.sh
+      - ls -l /app/opt/odin/odin /app/opt/odin/libLLVM*
+      # Prove the copy runs where it will actually live, before anything is
+      # built with it. A toolchain that only works at its build-time path is a
+      # runtime failure on a user's machine.
+      - ODIN_ROOT=/app/opt/odin /app/opt/odin/odin version
+
+  # ---- OLS: Odin language server (prebuilt release, MIT) ---------------
+  - name: ols
+    buildsystem: simple
+    build-options:
+      # Build with the compiler the module above installed, not a host one.
+      append-path: /app/opt/odin
+      env:
+        ODIN_ROOT: /app/opt/odin
+    build-commands:
+      # Upstream's build.sh is not used: it stamps VERSION from `git rev-parse`
+      # plus today's date (neither reproducible), and it passes
+      # -microarch:native, which targets the CPU that happens to be building.
+      # A bundle is redistributed, so it must run on the user's machine, not the
+      # builder's — native can emit instructions their CPU lacks. The rest of
+      # the flags are upstream's release line.
+      - odin build src/ -collection:src=src -out:ols -no-bounds-check -o:speed
+        -define:VERSION=dev-2026-06
+      - odin build tools/odinfmt/main.odin -file -collection:src=src -out:odinfmt
+        -no-bounds-check -o:speed
+      - install -Dm755 ols /app/bin/ols
+      - install -Dm755 odinfmt /app/bin/odinfmt
+      # OLS resolves its `builtin` docs folder next to its own binary
+      # (it logs "Failed to find the builtin folder at /app/bin/builtin"
+      # otherwise, and then can't analyze / emit diagnostics).
+      - cp -r builtin /app/bin/builtin
+    sources:
+      # The ols tag must track the compiler tag above: ols dev-2026-05 references
+      # Odin_OS_Type.Haiku, which the compiler dropped before dev-2026-07a, so it
+      # does not compile against it ("Undeclared name 'Haiku'"). Building ols from
+      # source is what surfaces this — a prebuilt binary hides the skew, because
+      # it was compiled against whatever ols CI happened to use.
+      - type: git
+        url: https://github.com/DanielGavin/ols.git
+        tag: dev-2026-06
+        commit: ca8eb6da44c2b1c9e63736af05a5c3a5a298ea82
+
+  # ---- marksman: Markdown language server (prebuilt release, MIT) ------
+  - name: marksman
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 marksman-linux-x64 /app/bin/marksman
+    sources:
+      - type: file
+        url: https://github.com/artempyanykh/marksman/releases/download/2026-02-08/marksman-linux-x64
+        sha256: be5098e8213219269c47fc0d916a66fa31ce0602ec967475c722260aabf26087
+
+  # ---- Optional extra servers (uncomment as wanted) ---------------------
+  # gopls is best built from source with the golang SDK extension
+  # (org.freedesktop.Sdk.Extension.golang) rather than a prebuilt blob;
+  # add `--share=network` above if Go module features are used.
+  # - name: gopls
+  #   buildsystem: simple
+  #   build-options:
+  #     append-path: /usr/lib/sdk/golang/bin
+  #     env: { GOFLAGS: -mod=mod }
+  #   build-commands:
+  #     - . /usr/lib/sdk/golang/enable.sh && GOBIN=/app/bin go install golang.org/x/tools/gopls@latest
+
+  # ---- yggr itself ------------------------------------------------------
+  - name: yggr
+    buildsystem: simple
+    build-options:
+      env:
+        ODIN_ROOT: /app/opt/odin
+    build-commands:
+      # C shim for GObject provider interfaces (ARCHITECTURE §6)
+      - mkdir -p build
+      - gcc -c src/ui/shim.c -o build/shim.o $(pkg-config --cflags gtk4 gtksourceview-5)
+      # -collection:amber points at the amber-lib source fetched below (afs is
+      # used by src/ui/editor.odin for lexical path/URI handling).
+      - /app/opt/odin/odin build src -collection:amber=amber-lib -out:build/yggr
+        -extra-linker-flags:"build/shim.o $(pkg-config --libs gtk4 gtksourceview-5)"
+      - install -Dm755 build/yggr /app/bin/yggr
+      # Expose `odin` on PATH for OLS (`odin check`) and for users. The libLLVM
+      # it needs came in with the toolchain copy above, from the SDK extension.
+      - ln -sf ../opt/odin/odin /app/bin/odin
+      # Bundled data
+      - install -Dm644 data/language-specs/odin.lang /app/share/gtksourceview-5/language-specs/odin.lang
+      - install -Dm644 flatpak/lsp-servers.conf /app/share/yggr/lsp-servers.conf
+      - install -Dm644 data/io.github.hyperquader.Yggr.desktop /app/share/applications/io.github.hyperquader.Yggr.desktop
+      - install -Dm644 data/io.github.hyperquader.Yggr.metainfo.xml /app/share/metainfo/io.github.hyperquader.Yggr.metainfo.xml
+      # Localization catalogs (gettext): English source + German out of the box.
+      # Compiled here rather than installed from the tree. The .mo is a build
+      # artefact and is gitignored, so `type: dir` finds it only on a machine
+      # where `make mo` has run — it is absent from a clean checkout, which is
+      # what CI and Flathub build from. Same command as the Makefile's `mo`.
+      - msgfmt --check po/de.po -o build/yggr-de.mo
+      - install -Dm644 build/yggr-de.mo /app/share/locale/de/LC_MESSAGES/yggr.mo
+      # Icons — scalable SVG + symbolic + pre-rendered hicolor PNGs (shipped in
+      # the repo). The .desktop Icon= key resolves to these by app-id.
+      - install -Dm644 data/icons/hicolor/scalable/apps/io.github.hyperquader.Yggr.svg
+        /app/share/icons/hicolor/scalable/apps/io.github.hyperquader.Yggr.svg
+      - install -Dm644 data/icons/hicolor/symbolic/apps/io.github.hyperquader.Yggr-symbolic.svg
+        /app/share/icons/hicolor/symbolic/apps/io.github.hyperquader.Yggr-symbolic.svg
+      - for s in 32 48 64 128 256 512; do
+        install -Dm644 data/icons/hicolor/${s}x${s}/apps/io.github.hyperquader.Yggr.png
+        /app/share/icons/hicolor/${s}x${s}/apps/io.github.hyperquader.Yggr.png; done
+    sources:
+      - type: dir
+        path: ..
+      # amber-lib: the `amber` Odin collection, consumed via -collection.
+      # Flathub requires a fixed `commit:` — pin one at submission.
+      - type: git
+        url: https://github.com/Hyperquader-Coders/amber-lib.git
+        branch: main
+        dest: amber-lib

@@ -1,0 +1,15 @@
+[Desktop Entry]
+Name=Yggr
+GenericName=Code Editor
+GenericName[de]=Code-Editor
+Comment=Code editor with built-in language servers
+Comment[de]=Code-Editor mit integrierten Sprachservern
+Exec=yggr %f
+Icon=io.github.hyperquader.Yggr
+Type=Application
+Categories=Development;IDE;TextEditor;GTK;
+Keywords=Editor;Code;LSP;Odin;Markdown;
+Keywords[de]=Editor;Code;LSP;Odin;Markdown;Quelltext;
+MimeType=text/plain;text/x-odin;text/markdown;
+Terminal=false
+StartupNotify=true

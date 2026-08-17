@@ -1,0 +1,117 @@
+# Build the Flatpak on a version tag and attach the bundle to a GitHub release.
+# yggr ships as a Flatpak and nothing else, so this is how a user gets it before
+# Flathub submission lands.
+#
+# The build is slow by construction: the manifest compiles the Odin compiler from
+# source against the llvm20 SDK extension. Expect tens of minutes.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  # Buildable without cutting a tag: uploads the bundle as an artifact and skips
+  # the release step.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  APPID: io.github.hyperquader.Yggr
+  MANIFEST: flatpak/io.github.hyperquader.Yggr.yaml
+
+jobs:
+  flatpak:
+    runs-on: ubuntu-24.04
+    # The GNOME SDK, the llvm20 extension and an LLVM-linked compiler build take
+    # far longer than the 6h default allows for, but not unboundedly so.
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      # The SDK plus the llvm20 extension plus the compiler build outgrow the
+      # runner's default free space; these three are the biggest things on it
+      # that no step here needs.
+      - name: free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h /
+
+      # elfutils supplies eu-strip and eu-elfcompress. flatpak-builder splits
+      # debug symbols into a .Debug extension after each module builds, and
+      # without eu-strip that post-build step fails the whole run — after the
+      # module itself has compiled fine, which makes it read like a build error.
+      #
+      # librsvg2-common supplies gdk-pixbuf's SVG loader. `flatpak build-export`
+      # validates exported icons on the HOST, not in the SDK, so a scalable icon
+      # fails with "is not a valid icon: Format not recognized" without it — an
+      # error that reads like a broken SVG rather than a missing loader.
+      # --no-install-recommends is what keeps it off the runner, so name it here.
+      - name: install flatpak-builder
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            flatpak flatpak-builder elfutils librsvg2-common
+
+      - name: add flathub
+        run: |
+          flatpak remote-add --if-not-exists --user \
+            flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
+      # The Odin toolchain comes from our own archive, not Flathub, so
+      # --install-deps-from cannot find it there. Adding the remote exactly as a
+      # third party would is the point: this build is the proof that the
+      # published extension is consumable by an ordinary manifest.
+      - name: add the amberlinux remote
+        run: |
+          flatpak remote-add --if-not-exists --user \
+            amberlinux https://flatpak.amberlinux.org/amberlinux.flatpakrepo
+          flatpak install --user --noninteractive \
+            amberlinux org.freedesktop.Sdk.Extension.odin
+          flatpak list --user --runtime | grep -i odin
+
+      # --install-deps-from reads the runtime, sdk and sdk-extensions out of the
+      # manifest, so the versions live in one place. Hardcoding them here would
+      # rot silently the next time the runtime moves.
+      - name: install the runtime, sdk and llvm extension
+        run: |
+          flatpak-builder --user --install-deps-from=flathub --install-deps-only \
+            build-dir "$MANIFEST"
+
+      # rofiles-fuse needs /dev/fuse, which the runner does not reliably give us.
+      - name: build
+        run: |
+          flatpak-builder --user --disable-rofiles-fuse --force-clean \
+            --repo=repo build-dir "$MANIFEST"
+
+      # --runtime-repo means a downloader who lacks the GNOME runtime is offered
+      # flathub to pull it from, instead of an unresolved-dependency error.
+      - name: bundle
+        run: |
+          name="yggr-${GITHUB_REF_NAME}-x86_64.flatpak"
+          [ "${GITHUB_REF_TYPE}" = tag ] || name="yggr-x86_64.flatpak"
+          flatpak build-bundle repo "$name" "$APPID" stable \
+            --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo
+          echo "BUNDLE=$name" >> "$GITHUB_ENV"
+          ls -lh "$name"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flatpak-bundle
+          path: ${{ env.BUNDLE }}
+
+      - name: publish
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "$BUNDLE" \
+            -R "$GITHUB_REPOSITORY" \
+            --title "yggr $GITHUB_REF_NAME" \
+            --notes "Flatpak bundle for yggr, the standalone editor test bed for kat800 (linux x86_64).
+
+              flatpak install --user ./$BUNDLE
+              flatpak run $APPID <file>
+
+          Language servers and an Odin toolchain are bundled, so LSP works with no host setup.
+          Installing pulls the GNOME 49 runtime from Flathub if it is not already present."
