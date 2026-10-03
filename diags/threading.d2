@@ -1,0 +1,38 @@
+# Yggr — threading & the cross-thread marshal boundary (ARCHITECTURE §2)
+# Render:  d2 diags/threading.d2 diags/threading.svg
+
+direction: right
+
+title: |md
+  # Threading model
+| { near: top-center }
+
+main: "Main thread (GTK)" {
+  style.fill: "#eef6ff"
+  owns: "owns all buffers, tags, marks, popovers"
+  req: "send requests / notifications\n(transport_write, mutex-guarded)"
+  idle: "on_*_main callbacks\n(apply diagnostics, build widgets,\ncomplete GTask)"
+}
+
+reader: "Reader thread (one per client)" {
+  style.fill: "#fbeef6"
+  loop: "read_frame → decode → dispatch"
+  cb: "response callback\n(extract + CLONE data, no GTK)"
+  alloc: "context.allocator pinned to\nruntime.heap_allocator() (thread-safe)"
+}
+
+server: "language server\n(subprocess stdio)" { style.fill: "#fff6e6" }
+
+main.req -> server: "requests (any thread-safe call)"
+server -> reader.loop: "responses / notifications"
+reader.loop -> reader.cb
+reader.cb -> main.idle: "g_idle_add_full(payload, free_fn)\nHEAP payload, freed by consumer" {
+  style.stroke-dash: 3
+  style.bold: true
+}
+
+rule: |md
+  **Rule:** no GTK call is ever reachable from the reader thread.
+  Everything crossing threads is a heap-allocated copy; borrowed
+  json.Value slices are cloned before handoff.
+| { near: bottom-center; style.fill: "#fffbe6" }

@@ -1,0 +1,16 @@
+Business Source License (BSL) — Yggr
+
+Copyright (c) 2025 Andre Bremer <hyperquader@gmail.com>, https://hyperquader.com
+
+Grant. Subject to the Restrictions below, Licensor grants you a nonexclusive, worldwide license to copy, modify, and distribute the Licensed Work for non-commercial development, testing, evaluation, and internal use.
+
+Restrictions. Except as expressly authorized in writing by Licensor, you may not:
+- use the Licensed Work, or any derivative, in a production environment for commercial exploitation;
+- sublicense the Licensed Work for prohibited activities;
+- use the Licensed Work, or any derivative, to train, fine-tune, evaluate, or otherwise improve any machine-learning, generative-AI, or related models, or to create datasets for such purposes, without a separate commercial license from Licensor.
+
+Change Date. On and after 2033-05-01 (the "Change Date"), the Licensed Work shall be automatically and irrevocably licensed under the GNU General Public License version 3 (GPL-3.0). From that date forward, the GPL-3.0 License governs the Licensed Work.
+
+Attribution. Redistributions must retain this notice, the copyright notice, and this license.
+
+No Warranty. The Licensed Work is provided "AS IS" without warranty of any kind.

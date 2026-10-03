@@ -1,0 +1,43 @@
+# Yggr — OLS check-on-save diagnostics chain (docs/FLATPAK.md §6)
+# Render:  d2 diags/ols-diagnostics.d2 diags/ols-diagnostics.svg
+#
+# Why this diagram exists: OLS does not have its own type checker. It produces
+# diagnostics by SHELLING OUT to `odin check`, which is why the Flatpak has to
+# bundle a *runnable* compiler (+ libLLVM + core/base/vendor + ODIN_ROOT), not
+# just the ols binary. This is the load-bearing difference from a normal LSP.
+
+title: |md
+  # OLS diagnostics — check-on-save
+| { near: top-center }
+
+seq: {
+  shape: sequence_diagram
+
+  user: "User"
+  yggr: "Yggr\n(editor.odin)"
+  ols: "ols\n/app/bin/ols"
+  odin: "odin check\n/app/opt/odin"
+
+  open: "on open" {
+    yggr -> ols: "initialize\nworkspaceFolders = project dir\n(OLS activates its project from this)"
+    yggr -> ols: "didOpen (v0, full text)"
+    yggr -> ols: "didSave  (kick the checker)"
+    ols -> odin: "spawn: odin check <pkg>\n(ODIN_ROOT=/app/opt/odin,\nbuiltin/ beside ols bin)"
+    odin -> ols: "parse + type errors (stdout)"
+    ols -> yggr: "textDocument/publishDiagnostics"
+    yggr -> yggr: "main-thread marshal →\nsquiggle tag + gutter mark"
+  }
+
+  save: "on Ctrl+S (refresh)" {
+    user -> yggr: "Ctrl+S"
+    yggr -> yggr: "write_entire_file(buffer)"
+    yggr -> ols: "textDocument/didSave"
+    ols -> odin: "odin check (re-run)"
+    odin -> ols: "errors"
+    ols -> yggr: "publishDiagnostics (updated)"
+  }
+
+  note: "didChange (v++) is still sent on every edit (150 ms debounce), but OLS\nis save-based — it re-checks only on didSave. Live-on-keystroke servers\n(e.g. gopls) diagnose on didChange instead; yggr feeds both the same way." {
+    yggr -> yggr: ""
+  }
+}

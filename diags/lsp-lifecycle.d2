@@ -1,0 +1,55 @@
+# Yggr — LSP lifecycle (SPEC §4.1, ARCHITECTURE §2)
+# Render:  d2 diags/lsp-lifecycle.d2 diags/lsp-lifecycle.svg
+
+title: |md
+  # LSP lifecycle
+| { near: top-center }
+
+seq: {
+  shape: sequence_diagram
+
+  editor: "Editor\n(main)"
+  client: "LSP client"
+  reader: "Reader thread"
+  server: "Language server"
+
+  open: "open file" {
+    editor -> client: "client_start(argv, root)"
+    client -> server: "spawn: foundry lsp run <lang>"
+    client -> server: "initialize (positionEncoding utf-8, caps)"
+    server -> reader: "InitializeResult"
+    reader -> reader: "capture utf8_pos, triggerCharacters, providers"
+    reader -> server: "initialized"
+    reader -> editor: "done() → g_idle_add (client ready)"
+    editor -> client: "client_did_open (buffer as it is now)"
+    client -> server: "textDocument/didOpen (v0, full text) + didSave"
+  }
+
+  diag: "diagnostics (push)" {
+    server -> reader: "textDocument/publishDiagnostics"
+    reader -> editor: "g_idle_add → apply tags + marks\n(drop if another URI or version stale)"
+  }
+
+  edit: "edit (150ms debounce)" {
+    editor -> client: "client_did_change_full (v++)"
+    client -> server: "textDocument/didChange"
+    server -> reader: "publishDiagnostics (new version)"
+    reader -> editor: "g_idle_add → re-render"
+  }
+
+  feat: "hover / completion / format" {
+    editor -> client: "flush pending didChange;\nclient_request(hover|completion|formatting)"
+    client -> server: "request"
+    server -> reader: "response"
+    reader -> editor: "g_idle_add → build widget / apply edits\n→ complete GTask"
+  }
+
+  close: "close / quit / SIGTERM" {
+    editor -> client: "client_did_close + client_shutdown"
+    client -> server: "shutdown"
+    server -> reader: "reply (waited ≤ 2s)"
+    client -> server: "exit; close stdin"
+    reader -> client: "EOF → reader joins"
+    client -> server: "2s grace; SIGTERM; 1s; SIGKILL"
+  }
+}
