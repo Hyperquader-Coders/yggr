@@ -1,0 +1,35 @@
+# Headless LSP client tests. src/lsp imports no GTK and no amber collection, so
+# this needs only a compiler; the GTK build rides the release workflow.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # Empty version follows amber-odin's monthly release; pin it for a
+      # reproducible build. ols: true brings odinfmt, which the format check calls.
+      - uses: Hyperquader-Coders/setup-amber-odin@v1
+        with:
+          ols: true
+
+      # The one package step: DEPS in the Makefile is the list, for a desk and for this runner.
+      - name: system packages
+        run: sudo apt-get update && make deps APT_FLAGS=-y
+
+      - name: formatting
+        run: make check-fmt
+
+      - name: odin test
+        run: make test
