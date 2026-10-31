@@ -1,0 +1,5 @@
+# RepositoryHub checks this repository against its template, packaging and licence
+# (repositoryhub docs/HYGIENE.md).
+template = "odin-app"
+packaging = ["flatpak"]
+license = "ASL-1.0"
