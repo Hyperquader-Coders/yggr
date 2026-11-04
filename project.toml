@@ -1,0 +1,62 @@
+# What yggr is and needs from apt: build is what the program is built with, test what only its
+# own checks need. A public repository: house-rules is no sibling, and house/ holds the copies
+# of its Makefile parts. house-rules docs/PROJECT_TOML.md has the layout.
+[project]
+schema = "amber-project-1"
+name = "yggr"
+kind = "other"
+license = "ASL-1.0"
+cla = "amber"
+summary = "kat800's editor as a standalone test bed, where editor and LSP features start"
+tags = [
+  "ai-assisted",
+  "amber",
+  "amberlinux",
+  "editor",
+  "gtk4",
+  "gtksourceview",
+  "lsp",
+  "odin",
+]
+# The format checks with lint, the agent-file guard, the type check, the headless tests (LSP core,
+# hover markup, paths, the GTK module path) and the GTK build.
+steps = [
+  "init-modules",
+  "lint",
+  "check-no-agent-files",
+  "check",
+  "test",
+  "build",
+]
+
+[build]
+# The Odin compiler (amber-odin, which brings clang) and odinfmt (amber-ols), the compiler driver
+# (gcc), the suite's GTK 4 (amber-gtk4 and its headers, amber-gtk4-dev) and GtkSourceView 5's
+# headers `make build` links against, gettext for `make mo`. amber-* come from
+# apt.amberlinux.org: the README adds it at a desk; on the runner setup-amber-odin adds it and
+# installs amber-odin and amber-ols itself.
+packages = [
+  "amber-odin",
+  "amber-ols",
+  "gcc",
+  "pkg-config",
+  "amber-gtk4",
+  "amber-gtk4-dev",
+  "libgtksourceview-5-dev",
+  "gettext",
+]
+
+[test]
+# python3 for `make check-toolchain`, shellcheck for `make lint`, shfmt for `make fmt` and
+# `make check-fmt`.
+packages = [
+  "python3",
+  "shellcheck",
+  "shfmt",
+]
+
+[runtime]
+# librsvg2-common draws the SVG icons GTK draws when yggr runs.
+packages = [
+  "librsvg2-common",
+]

@@ -1,0 +1,5 @@
+repo: https://github.com/Hyperquader-Coders/amber-json
+commit: 9f14b23f778fa79c9fac985e47a8ca2f711034f8
+vendored: 2026-10-10
+license: Amber Source License 1.0 (see ./LICENSE); the parts derived from Odin's core:encoding/json under Odin's BSD 3-clause licence (see ./third_party/odin/LICENSE)
+note: json/ only, as it is in amber-json; the suite's JSON reader, stricter than core's (yggr docs/DECISIONS.md)

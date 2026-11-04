@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+# check-own-libs: fail when a program loads the system's copy of a library the suite builds itself.
+#
+# The suite builds its own GTK (amber-gtk4), VTE (amber-vte), WebKitGTK and JavaScriptCore
+# (amber-webkit) and glycin (amber-glycin), and its programs run on those, never on Mint's
+# libgtk-4-1, libvte-2.91-gtk4-0, libwebkitgtk-6.0-4 or libglycin, which a desk usually has
+# installed beside them. For each program given, ldd resolves every library it loads; each of the
+# suite's libraries it loads must come from the folder named for it, and one that resolves
+# anywhere else, or to nothing, fails the check. A library the program does not load is not
+# asked about.
+#
+#   check-own-libs [--gtk DIR] [--vte DIR] [--webkit DIR] [--glycin DIR] <program>...
+#
+# Each folder is the installed package's unless an option names another, such as a checkout's
+# stage. A repository runs it from `make build` on its programs and from `make test` on its test
+# programs, through its HOUSE variable; a public repository keeps a copy, byte for byte, in its
+# own scripts/ (house-rules README, Checking that a program loads the suite's libraries).
+set -euo pipefail
+
+usage() {
+	cat <<'EOF'
+usage: check-own-libs [--gtk DIR] [--vte DIR] [--webkit DIR] [--glycin DIR] <program>...
+
+Fails a program that loads the suite's GTK, VTE, WebKitGTK, JavaScriptCore or
+glycin from anywhere but the suite's own folder for it, or does not find it.
+Prints, for each program, which of the suite's libraries it loads.
+
+  library                         folder (default)
+  libgtk-4.so.1                   --gtk     /usr/lib/amber-gtk4
+  libvte-2.91-gtk4.so.0           --vte     /usr/lib/amber-vte
+  libwebkitgtk-6.0.so.4           --webkit  /usr/lib/amber-webkit
+  libjavascriptcoregtk-6.0.so.1   --webkit  /usr/lib/amber-webkit
+  libglycin-2.so.0                --glycin  /usr/lib/amber-glycin
+  libglycin-gtk4-2.so.0           --glycin  /usr/lib/amber-glycin
+
+A program links them with -Wl,-rpath,<folder>, so its RUNPATH finds them
+before the system's. Exits 1 when a program loads a system copy, 0 when none
+does, 2 on a wrong argument or a program ldd cannot read.
+EOF
+}
+
+die() {
+	echo "check-own-libs: $*" >&2
+	exit 2
+}
+
+gtk=/usr/lib/amber-gtk4
+vte=/usr/lib/amber-vte
+webkit=/usr/lib/amber-webkit
+glycin=/usr/lib/amber-glycin
+programs=()
+while (($#)); do
+	case $1 in
+	-h | --help)
+		usage
+		exit 0
+		;;
+	--gtk | --vte | --webkit | --glycin)
+		(($# >= 2)) || die "$1 needs a folder"
+		printf -v "${1#--}" '%s' "$2"
+		shift
+		;;
+	--)
+		shift
+		programs+=("$@")
+		break
+		;;
+	-*)
+		usage >&2
+		exit 2
+		;;
+	*) programs+=("$1") ;;
+	esac
+	shift
+done
+((${#programs[@]})) || {
+	usage >&2
+	exit 2
+}
+
+# Each library by its soname, and the folder it must come from.
+own=(
+	"libgtk-4.so.1 $(realpath -m "$gtk")"
+	"libvte-2.91-gtk4.so.0 $(realpath -m "$vte")"
+	"libwebkitgtk-6.0.so.4 $(realpath -m "$webkit")"
+	"libjavascriptcoregtk-6.0.so.1 $(realpath -m "$webkit")"
+	"libglycin-2.so.0 $(realpath -m "$glycin")"
+	"libglycin-gtk4-2.so.0 $(realpath -m "$glycin")"
+)
+
+fail=0
+for program in "${programs[@]}"; do
+	[ -f "$program" ] || die "$program: no such file"
+	if ! out=$(ldd "$program" 2>&1); then
+		die "ldd failed on $program: $out"
+	fi
+	loaded=
+	for entry in "${own[@]}"; do
+		soname=${entry%% *}
+		want=${entry#* }
+		line=$(printf '%s\n' "$out" | awk -v s="$soname" '$1 == s { print; exit }')
+		[ -n "$line" ] || continue
+		path=$(printf '%s\n' "$line" | awk '{ print $3 }')
+		if [ "$path" = "not" ] || [ -z "$path" ]; then
+			echo "check-own-libs: $program: $soname is not found; it must come from $want" >&2
+			fail=1
+			continue
+		fi
+		dir=$(dirname "$(realpath -m "$path")")
+		if [ "$dir" != "$want" ]; then
+			echo "check-own-libs: $program: $soname from $path, not the suite's $want" >&2
+			fail=1
+			continue
+		fi
+		loaded="$loaded ${soname%%.so*}"
+	done
+	if [ -n "$loaded" ]; then
+		echo "  $(basename "$program"): the suite's$loaded"
+	else
+		echo "  $(basename "$program"): none of the suite's libraries"
+	fi
+done
+exit "$fail"
